@@ -3,7 +3,8 @@ spring:
     url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:appdb}?useSSL=false&serverTimezone=UTC&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:app}
     password: ${DB_PASSWORD:app_password}
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
+
+logging:
+  level:
+    org.springframework.jdbc.core: DEBUG # SQL 로그 (개발 시)
+    org.springframework.jdbc.core.StatementCreatorUtils: TRACE # 파라미터 바인딩 로그

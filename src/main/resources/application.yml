@@ -1,12 +1,6 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
-  jpa:
-    open-in-view: false
-    properties:
-      hibernate:
-        format_sql: true
-
 management:
   endpoints:
     web:
