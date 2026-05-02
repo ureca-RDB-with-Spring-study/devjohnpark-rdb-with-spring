@@ -1,0 +1,135 @@
+# ─────────────────────────────────────────
+# Java / Gradle
+# ─────────────────────────────────────────
+.gradle/
+build/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+!**/src/main/**/out/
+!**/src/test/**/out/
+
+# 컴파일 산출물
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+replay_pid*
+
+# ─────────────────────────────────────────
+# IDE — IntelliJ IDEA
+# ─────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# IDE — Eclipse / Spring Tools Suite
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings/
+.springBeans
+.sts4-cache
+bin/
+!**/src/main/**/bin/
+!**/src/test/**/bin/
+
+# IDE — VS Code
+.vscode/
+
+# IDE — NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# ─────────────────────────────────────────
+# Spring Boot
+# ─────────────────────────────────────────
+HELP.md
+*.original
+
+# 로컬 비밀 설정 (커밋 금지)
+application-secret.yml
+application-secret.properties
+application-local-override.yml
+
+# ─────────────────────────────────────────
+# 환경 변수 / 비밀 정보
+# ─────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+secrets/
+
+# ─────────────────────────────────────────
+# Terraform
+# ─────────────────────────────────────────
+infra/.terraform/
+infra/.terraform.lock.hcl
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfstate.backup
+infra/crash.log
+infra/crash.*.log
+infra/terraform.tfvars
+infra/*.auto.tfvars
+infra/override.tf
+infra/override.tf.json
+infra/*_override.tf
+infra/*_override.tf.json
+infra/.terraformrc
+infra/terraform.rc
+
+# ─────────────────────────────────────────
+# Docker
+# ─────────────────────────────────────────
+docker-compose.override.yml
+.docker/
+
+# ─────────────────────────────────────────
+# 로그
+# ─────────────────────────────────────────
+*.log
+logs/
+log/
+
+# ─────────────────────────────────────────
+# OS — macOS
+# ─────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# OS — Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# OS — Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+
+# ─────────────────────────────────────────
+# 편집기 / 기타
+# ─────────────────────────────────────────
+*.swp
+*.swo
+*.bak
+*.tmp
+.cache/
+node_modules/
