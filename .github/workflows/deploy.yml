@@ -14,28 +14,23 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-22.04
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
           cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - run: chmod +x gradlew
 
       - name: Build with Gradle
         run: ./gradlew clean build -x test
 
-      - name: Upload jar artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: app-jar
           path: build/libs/*.jar
-          retention-days: 7
 
   docker-push:
     name: Build and Push Docker Image
@@ -43,21 +38,25 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
-      registry: ${{ steps.login-ecr.outputs.registry }}
+      registry: ${{ steps.registry.outputs.url }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Compute ECR registry URL
+        id: registry
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          echo "url=$REGISTRY" >> $GITHUB_OUTPUT
+          echo "ECR Registry: $REGISTRY"
 
       - name: Compute image tag
         id: meta
@@ -65,7 +64,7 @@ jobs:
 
       - name: Build and push Docker image
         env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REGISTRY: ${{ steps.registry.outputs.url }}
           TAG: ${{ steps.meta.outputs.tag }}
         run: |
           docker build \
@@ -79,8 +78,7 @@ jobs:
     needs: docker-push
     runs-on: ubuntu-22.04
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -102,52 +100,112 @@ jobs:
           echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
           echo "Found instance: $INSTANCE_ID"
 
-      - name: Deploy via SSM Run Command
+      - name: Generate deployment script
         env:
-          INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
           REGISTRY: ${{ needs.docker-push.outputs.registry }}
           TAG: ${{ needs.docker-push.outputs.image_tag }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USERNAME: ${{ secrets.DB_USERNAME }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
         run: |
-          IMAGE="${REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+          if [ -z "$REGISTRY" ]; then
+            echo "ERROR: REGISTRY가 비어있음"
+            exit 1
+          fi
 
-          echo "==> SSM 명령 전송"
+          IMAGE="${REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+          echo "Image: $IMAGE"
+
+          cat > /tmp/deploy.sh <<EOF
+          #!/bin/bash
+          set -e
+
+          AWS_REGION="${AWS_REGION}"
+          REGISTRY="${REGISTRY}"
+          IMAGE="${IMAGE}"
+          DB_HOST="${{ secrets.DB_HOST }}"
+          DB_NAME="${{ secrets.DB_NAME }}"
+          DB_USERNAME="${{ secrets.DB_USERNAME }}"
+          DB_PASSWORD='${{ secrets.DB_PASSWORD }}'
+
+          echo "==> ECR 로그인"
+          aws ecr get-login-password --region \$AWS_REGION \
+            | sudo docker login --username AWS --password-stdin \$REGISTRY
+
+          echo "==> 새 이미지 pull: \$IMAGE"
+          sudo docker pull \$IMAGE
+
+          echo "==> 기존 컨테이너 정리"
+          sudo docker stop app 2>/dev/null || true
+          sudo docker rm app 2>/dev/null || true
+
+          echo "==> 새 컨테이너 실행"
+          sudo docker run -d \
+            --name app \
+            --restart=unless-stopped \
+            -p 80:8080 \
+            -e SPRING_PROFILES_ACTIVE=prod \
+            -e DB_HOST="\$DB_HOST" \
+            -e DB_PORT=3306 \
+            -e DB_NAME="\$DB_NAME" \
+            -e DB_USERNAME="\$DB_USERNAME" \
+            -e DB_PASSWORD="\$DB_PASSWORD" \
+            \$IMAGE
+
+          echo "==> 헬스체크 (최대 60초 대기)"
+          for i in {1..30}; do
+            if curl -fsS http://localhost/actuator/health > /dev/null 2>&1; then
+              echo "Healthy!"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "헬스체크 실패. 컨테이너 로그:"
+          sudo docker logs app
+          exit 1
+          EOF
+
+          jq -Rs '{commands: [.]}' /tmp/deploy.sh > /tmp/params.json
+          echo "Generated params.json (first 200 chars):"
+          head -c 200 /tmp/params.json
+          echo ""
+
+      - name: Send SSM command
+        id: ssm
+        env:
+          INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
+          TAG: ${{ needs.docker-push.outputs.image_tag }}
+        run: |
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
             --comment "Deploy ${TAG}" \
-            --cloud-watch-output-config "CloudWatchOutputEnabled=false" \
-            --parameters "{\"commands\":[\"set -e\",\"REGISTRY='${REGISTRY}'\",\"IMAGE='${IMAGE}'\",\"echo '==> ECR 로그인'\",\"aws ecr get-login-password --region ${AWS_REGION} | sudo docker login --username AWS --password-stdin \\\$REGISTRY\",\"echo '==> 새 이미지 pull'\",\"sudo docker pull \\\$IMAGE\",\"echo '==> 기존 컨테이너 정리'\",\"sudo docker stop app 2>/dev/null || true\",\"sudo docker rm app 2>/dev/null || true\",\"echo '==> 새 컨테이너 실행'\",\"sudo docker run -d --name app --restart=unless-stopped -p 80:8080 -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST='${DB_HOST}' -e DB_PORT=3306 -e DB_NAME='${DB_NAME}' -e DB_USERNAME='${DB_USERNAME}' -e DB_PASSWORD='${DB_PASSWORD}' \\\$IMAGE\",\"echo '==> 헬스체크 (최대 60초 대기)'\",\"for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do if curl -fsS http://localhost/actuator/health >/dev/null 2>&1; then echo 'Healthy!'; exit 0; fi; sleep 2; done; sudo docker logs app; exit 1\"]}" \
+            --parameters file:///tmp/params.json \
             --query 'Command.CommandId' \
             --output text)
 
+          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
           echo "Command ID: $COMMAND_ID"
-          echo "command_id=$COMMAND_ID" >> $GITHUB_ENV
 
-          echo "==> 명령 실행 완료 대기 (최대 5분)"
           aws ssm wait command-executed \
             --command-id "$COMMAND_ID" \
             --instance-id "$INSTANCE_ID" || true
 
       - name: Print SSM execution result
-        if: always() && env.command_id != ''
+        if: always() && steps.ssm.outputs.command_id != ''
         env:
           INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
+          COMMAND_ID: ${{ steps.ssm.outputs.command_id }}
         run: |
-          echo "==> 실행 상태"
-          aws ssm get-command-invocation \
-            --command-id "$command_id" \
+          STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
             --instance-id "$INSTANCE_ID" \
             --query 'Status' \
-            --output text
+            --output text)
+          echo "Status: $STATUS"
 
           echo ""
           echo "==> 표준 출력"
           aws ssm get-command-invocation \
-            --command-id "$command_id" \
+            --command-id "$COMMAND_ID" \
             --instance-id "$INSTANCE_ID" \
             --query 'StandardOutputContent' \
             --output text
@@ -155,19 +213,9 @@ jobs:
           echo ""
           echo "==> 표준 에러"
           aws ssm get-command-invocation \
-            --command-id "$command_id" \
+            --command-id "$COMMAND_ID" \
             --instance-id "$INSTANCE_ID" \
             --query 'StandardErrorContent' \
             --output text
 
-          # 실패 시 잡 자체를 실패로 처리
-          STATUS=$(aws ssm get-command-invocation \
-            --command-id "$command_id" \
-            --instance-id "$INSTANCE_ID" \
-            --query 'Status' \
-            --output text)
-
-          if [ "$STATUS" != "Success" ]; then
-            echo "::error::SSM 배포 실패: status=$STATUS"
-            exit 1
-          fi
+          [ "$STATUS" = "Success" ] || exit 1
