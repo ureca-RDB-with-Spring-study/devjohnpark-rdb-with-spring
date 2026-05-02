@@ -1,111 +1,102 @@
-name: Build & Deploy
+deploy-ec2:
+  name: Deploy to EC2 via SSM
+  needs: docker-push
+  runs-on: ubuntu-22.04
+  steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region:            ${{ env.AWS_REGION }}
 
-on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+    - name: Find target EC2 instance
+      id: target
+      run: |
+        INSTANCE_ID=$(aws ec2 describe-instances \
+          --filters "Name=tag:Name,Values=smartclearance-app" "Name=instance-state-name,Values=running" \
+          --query 'Reservations[0].Instances[0].InstanceId' \
+          --output text)
+        echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+        echo "Found instance: $INSTANCE_ID"
 
-env:
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+    - name: Deploy via SSM Run Command
+      env:
+        REGISTRY: ${{ needs.docker-push.outputs.registry }}
+        TAG: ${{ needs.docker-push.outputs.image_tag }}
+        INSTANCE_ID: ${{ steps.target.outputs.instance_id }}
+      run: |
+        IMAGE="$REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG"
 
-jobs:
-  build-test:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
+        SCRIPT=$(cat <<-'BASH'
+          set -e
+          REGISTRY="__REGISTRY__"
+          IMAGE="__IMAGE__"
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: gradle
+          echo "==> ECR 로그인"
+          aws ecr get-login-password --region __REGION__ \
+            | docker login --username AWS --password-stdin $REGISTRY
 
-      - name: Build & Test
-        run: ./gradlew clean build
+          echo "==> 새 이미지 pull"
+          docker pull $IMAGE
 
-      - name: Upload jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-jar
-          path: build/libs/*.jar
+          echo "==> 기존 컨테이너 정리"
+          docker stop app 2>/dev/null || true
+          docker rm   app 2>/dev/null || true
 
-  docker-push:
-    needs: build-test
-    runs-on: ubuntu-22.04
-    outputs:
-      image_tag: ${{ steps.meta.outputs.tag }}
-    steps:
-      - uses: actions/checkout@v4
+          echo "==> 새 컨테이너 실행"
+          docker run -d \
+            --name app \
+            --restart=unless-stopped \
+            -p 80:8080 \
+            -e SPRING_PROFILES_ACTIVE=prod \
+            -e DB_HOST='__DB_HOST__' \
+            -e DB_PORT=3306 \
+            -e DB_NAME='__DB_NAME__' \
+            -e DB_USERNAME='__DB_USERNAME__' \
+            -e DB_PASSWORD='__DB_PASSWORD__' \
+            $IMAGE
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+          echo "==> 헬스체크"
+          for i in {1..30}; do
+            if curl -fsS http://localhost/actuator/health > /dev/null 2>&1; then
+              echo "Healthy!"
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs app
+          exit 1
+        BASH
+        )
 
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+        # 변수 치환
+        SCRIPT="${SCRIPT//__REGISTRY__/$REGISTRY}"
+        SCRIPT="${SCRIPT//__IMAGE__/$IMAGE}"
+        SCRIPT="${SCRIPT//__REGION__/${{ env.AWS_REGION }}}"
+        SCRIPT="${SCRIPT//__DB_HOST__/${{ secrets.DB_HOST }}}"
+        SCRIPT="${SCRIPT//__DB_NAME__/${{ secrets.DB_NAME }}}"
+        SCRIPT="${SCRIPT//__DB_USERNAME__/${{ secrets.DB_USERNAME }}}"
+        SCRIPT="${SCRIPT//__DB_PASSWORD__/${{ secrets.DB_PASSWORD }}}"
 
-      - name: Compute tag
-        id: meta
-        run: echo "tag=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        # JSON 인코딩 후 실행
+        COMMAND_ID=$(aws ssm send-command \
+          --instance-ids "$INSTANCE_ID" \
+          --document-name "AWS-RunShellScript" \
+          --parameters "commands=[\"$(echo "$SCRIPT" | sed 's/"/\\"/g' | tr '\n' '|' | sed 's/|/\\n/g')\"]" \
+          --query 'Command.CommandId' \
+          --output text)
 
-      - name: Build & Push image
-        env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          TAG: ${{ steps.meta.outputs.tag }}
-        run: |
-          docker build -t $REGISTRY/$ECR_REPOSITORY:$TAG \
-                       -t $REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $REGISTRY/$ECR_REPOSITORY:$TAG
-          docker push $REGISTRY/$ECR_REPOSITORY:latest
+        echo "Command ID: $COMMAND_ID"
 
-  deploy-ec2:
-    needs: docker-push
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
+        # 완료 대기 (최대 5분)
+        aws ssm wait command-executed \
+          --command-id "$COMMAND_ID" \
+          --instance-id "$INSTANCE_ID"
 
-      - name: Get ECR registry
-        id: ecr
-        run: |
-          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-          echo "registry=${ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com" >> $GITHUB_OUTPUT
-
-      - name: SSH deploy to EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host:     ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key:      ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            set -e
-            REGISTRY=${{ steps.ecr.outputs.registry }}
-            TAG=${{ needs.docker-push.outputs.image_tag }}
-            aws ecr get-login-password --region ${{ env.AWS_REGION }} \
-              | sudo docker login --username AWS --password-stdin $REGISTRY
-
-            sudo docker pull $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG
-            sudo docker stop app || true
-            sudo docker rm   app || true
-
-            sudo docker run -d --name app --restart=always \
-              -p 80:8080 \
-              -e SPRING_PROFILES_ACTIVE=prod \
-              -e DB_HOST='${{ secrets.DB_HOST }}' \
-              -e DB_NAME='${{ secrets.DB_NAME }}' \
-              -e DB_USERNAME='${{ secrets.DB_USERNAME }}' \
-              -e DB_PASSWORD='${{ secrets.DB_PASSWORD }}' \
-              $REGISTRY/${{ env.ECR_REPOSITORY }}:$TAG
-
-            sleep 10
-            curl -fsS http://localhost/actuator/health || (sudo docker logs app && exit 1)
+        # 결과 출력
+        aws ssm get-command-invocation \
+          --command-id "$COMMAND_ID" \
+          --instance-id "$INSTANCE_ID" \
+          --query 'StandardOutputContent' \
+          --output text

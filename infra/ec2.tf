@@ -55,6 +55,10 @@ locals {
   app_user_data = <<-EOF
     #!/bin/bash
     set -e
+
+    # Ubuntu 22.04에는 SSM Agent가 snap으로 사전 설치되어 있지만 가끔 시작이 안 된 상태로 부팅되므로 명시적 시작
+    snap start amazon-ssm-agent || true 
+
     apt-get update -y
     apt-get install -y ca-certificates curl gnupg unzip
     install -m 0755 -d /etc/apt/keyrings
