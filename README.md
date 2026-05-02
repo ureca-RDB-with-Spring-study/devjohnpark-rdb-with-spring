@@ -1,1 +1,1 @@
-# devjohnpark-rdb-with-spring
+# Smart Clearance Store 
