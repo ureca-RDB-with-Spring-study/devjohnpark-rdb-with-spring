@@ -36,7 +36,6 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       image_tag: ${{ steps.meta.outputs.tag }}
-      registry: ${{ steps.registry.outputs.url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,14 +47,8 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Compute ECR registry URL
-        id: registry
-        run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-          echo "url=$REGISTRY" >> $GITHUB_OUTPUT
 
       - name: Compute tag
         id: meta
@@ -63,7 +56,7 @@ jobs:
 
       - name: Build & Push image
         env:
-          REGISTRY: ${{ steps.registry.outputs.url }}
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           TAG: ${{ steps.meta.outputs.tag }}
         run: |
           docker build -t $REGISTRY/$ECR_REPOSITORY:$TAG \
@@ -76,20 +69,6 @@ jobs:
     needs: docker-push
     runs-on: ubuntu-22.04
     steps:
-      - name: Debug needs context
-        run: |
-          echo "═══════════════════════════════════════════"
-          echo "needs.docker-push 컨텍스트 확인"
-          echo "═══════════════════════════════════════════"
-          echo "result    = '${{ needs.docker-push.result }}'"
-          echo ""
-          echo "outputs:"
-          echo "  registry  = '${{ needs.docker-push.outputs.registry }}'"
-          echo "  image_tag = '${{ needs.docker-push.outputs.image_tag }}'"
-          echo ""
-          echo "outputs JSON:"
-          echo '${{ toJSON(needs.docker-push.outputs) }}'
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -115,9 +94,11 @@ jobs:
 
       - name: Generate deployment script
         env:
-          REGISTRY: ${{ needs.docker-push.outputs.registry }}
           TAG: ${{ needs.docker-push.outputs.image_tag }}
         run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
           if [ -z "$REGISTRY" ]; then
             echo "ERROR: REGISTRY가 비어있음"
             exit 1
