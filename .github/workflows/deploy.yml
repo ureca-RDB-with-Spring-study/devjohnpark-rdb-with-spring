@@ -76,6 +76,20 @@ jobs:
     needs: docker-push
     runs-on: ubuntu-22.04
     steps:
+      - name: Debug needs context
+        run: |
+          echo "═══════════════════════════════════════════"
+          echo "needs.docker-push 컨텍스트 확인"
+          echo "═══════════════════════════════════════════"
+          echo "result    = '${{ needs.docker-push.result }}'"
+          echo ""
+          echo "outputs:"
+          echo "  registry  = '${{ needs.docker-push.outputs.registry }}'"
+          echo "  image_tag = '${{ needs.docker-push.outputs.image_tag }}'"
+          echo ""
+          echo "outputs JSON:"
+          echo '${{ toJSON(needs.docker-push.outputs) }}'
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
