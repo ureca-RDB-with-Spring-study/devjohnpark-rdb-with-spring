@@ -3,8 +3,6 @@ package com.smartclearance.customer;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 @Service
 @Transactional(readOnly = true)
 public class CustomerService {
@@ -15,35 +13,17 @@ public class CustomerService {
         this.customerRepository = customerRepository;
     }
 
-    public List<Customer> findAll() {
-        return customerRepository.findAll();
-    }
-
-    public Customer findById(Long id) {
-        return customerRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("Customer not found: " + id));
-    }
-
     @Transactional
-    public Customer create(CustomerCreateRequest request) {
+    public CustomerResponse register(CustomerCreateRequest request) {
         if (customerRepository.existsByEmail(request.email())) {
-            throw new IllegalArgumentException("Email already exists: " + request.email());
+            throw new IllegalArgumentException("이미 사용 중인 이메일입니다: " + request.email());
         }
 
-        Customer customer = Customer.builder()
-                .name(request.name())
-                .email(request.email())
-                .password(request.password())
-                .address(request.address())
-                .build();
-
+        Customer customer = new Customer(null, request.name(), request.email(), request.password(), request.address(), null);
         Long generatedId = customerRepository.save(customer);
 
         return customerRepository.findById(generatedId)
-                .orElseThrow(() -> new IllegalStateException("Failed to load saved customer"));
-    }
-
-    public long count() {
-        return customerRepository.count();
+                .map(CustomerResponse::from)
+                .orElseThrow(() -> new IllegalStateException("저장된 회원을 조회할 수 없습니다"));
     }
 }
