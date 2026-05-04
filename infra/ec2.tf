@@ -100,6 +100,10 @@ resource "aws_instance" "app" {
     volume_type = "gp3"
   }
   tags = { Name = "${var.project}-app" }
+
+  lifecycle {
+    ignore_changes = [ami, user_data]
+  }
 }
 
 resource "aws_instance" "k6" {
@@ -116,4 +120,8 @@ resource "aws_instance" "k6" {
     volume_type = "gp3"
   }
   tags = { Name = "${var.project}-k6" }
+
+  lifecycle {
+    ignore_changes = [ami, user_data]
+  }
 }
