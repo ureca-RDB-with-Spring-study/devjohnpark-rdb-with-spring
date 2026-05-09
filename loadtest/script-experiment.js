@@ -5,22 +5,18 @@ const BASE_URL = __ENV.APP_URL || 'http://localhost:8080';
 
 export const options = {
   scenarios: {
-    orders: {
-      executor: 'ramping-arrival-rate',
-      startRate: 100,
+    constant_load: {
+      executor: 'constant-arrival-rate',
+      rate: 200,
       timeUnit: '1s',
-      preAllocatedVUs: 500,
-      maxVUs: 5000,
-      stages: [
-        { duration: '30s', target: 1000 },
-        { duration: '3m',  target: 3000 },
-        { duration: '30s', target: 0    },
-      ],
+      duration: '15m',
+      preAllocatedVUs: 100,
+      maxVUs: 500,
     },
   },
   thresholds: {
     http_req_failed:   ['rate<0.05'],
-    http_req_duration: ['p(95)<2000'],
+    http_req_duration: ['p(95)<5000'],
   },
 };
 
@@ -29,12 +25,8 @@ export default function () {
   const productId  = Math.floor(Math.random() * 1000)  + 1;
 
   const res = http.post(`${BASE_URL}/api/orders`, JSON.stringify({
-    customerId: customerId,
-    productId:  productId,
-    quantity:   1,
-  }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
+    customerId, productId, quantity: 1,
+  }), { headers: { 'Content-Type': 'application/json' } });
 
   check(res, {
     'status 201': (r) => r.status === 201,

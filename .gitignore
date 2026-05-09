@@ -77,6 +77,7 @@ infra/.terraform.lock.hcl
 infra/*.tfstate
 infra/*.tfstate.*
 infra/*.tfstate.backup
+infra/tfplan
 infra/crash.log
 infra/crash.*.log
 infra/terraform.tfvars
@@ -132,3 +133,9 @@ $RECYCLE.BIN/
 *.tmp
 .cache/
 node_modules/
+
+# Experiment results
+results/
+
+# SQL data files
+sql/
