@@ -19,12 +19,14 @@ public class ProductRepository {
     private static final RowMapper<Product> ROW_MAPPER = (rs, rowNum) -> new Product(
             rs.getLong("product_id"),
             rs.getString("name"),
+            rs.getString("category"),
+            rs.getString("description"),
             rs.getInt("price"),
             rs.getInt("stock_quantity")
     );
 
     public Optional<Product> findById(Long id) {
-        String sql = "SELECT product_id, name, price, stock_quantity FROM products WHERE product_id = ?";
+        String sql = "SELECT product_id, name, category, description, price, stock_quantity FROM products WHERE product_id = ?";
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(sql, ROW_MAPPER, id));
         } catch (EmptyResultDataAccessException e) {

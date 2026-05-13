@@ -16,6 +16,13 @@ public class OrderController {
         this.orderService = orderService;
     }
 
+    // JOIN 쿼리로 조회한 주문 상세 정보(사용자명, 상품명 포함)를 반환한다
+    // 존재하지 않는 id 요청 시 ExceptionHandler가 400을 응답한다
+    @GetMapping("/{id}")
+    public ResponseEntity<OrderDetailResponse> getOrderDetail(@PathVariable Long id) {
+        return ResponseEntity.ok(orderService.getOrderDetail(id));
+    }
+
     @PostMapping
     public ResponseEntity<OrderResponse> order(@RequestBody OrderCreateRequest request) {
         OrderResponse response = orderService.order(request);

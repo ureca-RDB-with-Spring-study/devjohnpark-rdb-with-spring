@@ -1,7 +1,7 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
-  flyway:
+  flyway: # flyway.target이 따로 설정되지 않으면 기본값은 latest이므로 모든 마이그레이션(V1, V2, V3, ...)이 전부 적용
     baseline-on-migrate: true
 management:
   endpoints:

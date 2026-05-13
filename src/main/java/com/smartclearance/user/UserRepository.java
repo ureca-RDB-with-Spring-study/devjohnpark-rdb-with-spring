@@ -1,4 +1,4 @@
-package com.smartclearance.customer;
+package com.smartclearance.user;
 
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -7,45 +7,46 @@ import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
+import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.util.Optional;
 
 @Repository
-public class CustomerRepository {
+public class UserRepository {
 
     private final JdbcTemplate jdbcTemplate;
 
-    public CustomerRepository(JdbcTemplate jdbcTemplate) {
+    public UserRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    private static final RowMapper<Customer> ROW_MAPPER = (rs, rowNum) -> new Customer(
-            rs.getLong("customer_id"),
+    private static final RowMapper<User> ROW_MAPPER = (rs, rowNum) -> new User(
+            rs.getLong("user_id"),
             rs.getString("name"),
             rs.getString("email"),
             rs.getString("password"),
             rs.getString("address"),
-            rs.getTimestamp("join_date") != null
-                    ? rs.getTimestamp("join_date").toLocalDateTime()
-                    : null
+            rs.getDate("birth_date") != null ? rs.getDate("birth_date").toLocalDate() : null,
+            rs.getTimestamp("created_at") != null ? rs.getTimestamp("created_at").toLocalDateTime() : null
     );
 
-    public Long save(Customer customer) {
-        String sql = "INSERT INTO customers (name, email, password, address) VALUES (?, ?, ?, ?)";
+    public Long save(User user) {
+        String sql = "INSERT INTO users (name, email, password, address, birth_date) VALUES (?, ?, ?, ?, ?)";
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(sql, new String[]{"customer_id"});
-            ps.setString(1, customer.getName());
-            ps.setString(2, customer.getEmail());
-            ps.setString(3, customer.getPassword());
-            ps.setString(4, customer.getAddress());
+            PreparedStatement ps = connection.prepareStatement(sql, new String[]{"user_id"});
+            ps.setString(1, user.getName());
+            ps.setString(2, user.getEmail());
+            ps.setString(3, user.getPassword());
+            ps.setString(4, user.getAddress());
+            ps.setDate(5, user.getBirthDate() != null ? Date.valueOf(user.getBirthDate()) : null);
             return ps;
         }, keyHolder);
         return keyHolder.getKey().longValue();
     }
 
-    public Optional<Customer> findById(Long id) {
-        String sql = "SELECT customer_id, name, email, password, address, join_date FROM customers WHERE customer_id = ?";
+    public Optional<User> findById(Long id) {
+        String sql = "SELECT user_id, name, email, password, address, birth_date, created_at FROM users WHERE user_id = ?";
         try {
             return Optional.ofNullable(jdbcTemplate.queryForObject(sql, ROW_MAPPER, id));
         } catch (EmptyResultDataAccessException e) {
@@ -54,7 +55,7 @@ public class CustomerRepository {
     }
 
     public boolean existsByEmail(String email) {
-        String sql = "SELECT COUNT(*) FROM customers WHERE email = ?";
+        String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, email);
         return count != null && count > 0;
     }

@@ -4,3 +4,7 @@ spring:
     driver-class-name: org.h2.Driver
   flyway:
     target: 1
+# spring:datasource:url -> jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+# testdb를 H2 인메모리 DB로 설정
+# H2 없으면 기본 설정인 MySQL로 연결을 시도 설정
+# flyway:target:1 -> Flyway 마이그레이션을 V1까지만 실행하도록 제한하는 설정
