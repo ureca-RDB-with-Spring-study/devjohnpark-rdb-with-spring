@@ -9,6 +9,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -22,6 +23,30 @@ class UserIntegrationTest {
     // HTTP 요청 → (네트워크 생략) → Controller → Service → Repository
     @Autowired
     MockMvc mockMvc;
+
+    @Test
+    void 주문없는_유저가_있으면_200과_목록을_반환한다() throws Exception {
+        mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"name": "주문없음유저", "email": "no_order@test.com", "password": "pw"}
+                                """))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/users/no-orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$[0].email").value("no_order@test.com"))
+                .andExpect(jsonPath("$[0].password").doesNotExist());
+    }
+
+    @Test
+    void 모든_유저가_주문이_있으면_빈_배열을_반환한다() throws Exception {
+        mockMvc.perform(get("/api/users/no-orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$").isEmpty());
+    }
 
     @Test
     void 회원가입_성공시_201과_회원정보를_반환한다() throws Exception {

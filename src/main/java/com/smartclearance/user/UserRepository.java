@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Date;
 import java.sql.PreparedStatement;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -52,6 +53,17 @@ public class UserRepository {
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }
+    }
+
+    public List<User> findAllWithNoOrders() {
+        String sql = """
+                SELECT user_id, name, email, password, address, birth_date, created_at
+                FROM users u
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM orders o WHERE o.user_id = u.user_id
+                )
+                """;
+        return jdbcTemplate.query(sql, ROW_MAPPER);
     }
 
     public boolean existsByEmail(String email) {

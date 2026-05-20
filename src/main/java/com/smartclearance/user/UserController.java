@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -14,6 +15,11 @@ public class UserController {
 
     public UserController(UserService userService) {
         this.userService = userService;
+    }
+
+    @GetMapping("/no-orders")
+    public ResponseEntity<List<UserResponse>> getUsersWithNoOrders() {
+        return ResponseEntity.ok(userService.getUsersWithNoOrders());
     }
 
     @PostMapping

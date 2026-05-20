@@ -4,8 +4,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.JdbcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.ActiveProfiles;
 
+import java.sql.PreparedStatement;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +36,9 @@ class UserRepositoryTest {
 
     @Autowired
     UserRepository userRepository;
+
+    @Autowired
+    JdbcTemplate jdbcTemplate;
 
     @Test
     void 유저저장후_ID로_조회한다() {
@@ -64,5 +72,63 @@ class UserRepositoryTest {
         Optional<User> found = userRepository.findById(999L);
 
         assertThat(found).isEmpty();
+    }
+
+    @Test
+    void 주문이_없는_유저만_조회된다() {
+        long userWithOrderId = insertUser("주문유저", "with_order@test.com");
+        long userWithoutOrderId = insertUser("주문없음유저", "no_order@test.com");
+        long productId = insertProduct("테스트상품", 10000, 100);
+        insertOrder(userWithOrderId, productId);
+
+        List<User> result = userRepository.findAllWithNoOrders();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getUserId()).isEqualTo(userWithoutOrderId);
+    }
+
+    @Test
+    void 모든_유저가_주문이_있으면_빈_목록을_반환한다() {
+        long userId = insertUser("주문유저", "all_ordered@test.com");
+        long productId = insertProduct("테스트상품", 10000, 100);
+        insertOrder(userId, productId);
+
+        List<User> result = userRepository.findAllWithNoOrders();
+
+        assertThat(result).isEmpty();
+    }
+
+    private long insertUser(String name, String email) {
+        KeyHolder key = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    "INSERT INTO users (name, email, password) VALUES (?, ?, ?)",
+                    new String[]{"user_id"});
+            ps.setString(1, name);
+            ps.setString(2, email);
+            ps.setString(3, "password123");
+            return ps;
+        }, key);
+        return key.getKey().longValue();
+    }
+
+    private long insertProduct(String name, int price, int stock) {
+        KeyHolder key = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(
+                    "INSERT INTO products (name, price, stock_quantity) VALUES (?, ?, ?)",
+                    new String[]{"product_id"});
+            ps.setString(1, name);
+            ps.setInt(2, price);
+            ps.setInt(3, stock);
+            return ps;
+        }, key);
+        return key.getKey().longValue();
+    }
+
+    private void insertOrder(long userId, long productId) {
+        jdbcTemplate.update(
+                "INSERT INTO orders (user_id, product_id, quantity, status) VALUES (?, ?, ?, ?)",
+                userId, productId, 1, "PENDING");
     }
 }

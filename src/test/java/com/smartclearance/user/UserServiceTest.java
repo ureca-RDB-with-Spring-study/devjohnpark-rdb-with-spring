@@ -8,6 +8,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -36,6 +37,27 @@ class UserServiceTest {
     // 만들어진 가짜 객체(@Mock)들을 주입받는 실제 테스트 대상 객체
     @InjectMocks
     UserService userService;
+
+    @Test
+    void 주문없는_유저목록을_반환한다() {
+        User user = new User(1L, "주문없음유저", "no_order@test.com", "password123", null, null, LocalDateTime.now());
+        given(userRepository.findAllWithNoOrders()).willReturn(List.of(user));
+
+        List<UserResponse> result = userService.getUsersWithNoOrders();
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).userId()).isEqualTo(1L);
+        assertThat(result.get(0).name()).isEqualTo("주문없음유저");
+    }
+
+    @Test
+    void 주문없는_유저가_없으면_빈_목록을_반환한다() {
+        given(userRepository.findAllWithNoOrders()).willReturn(List.of());
+
+        List<UserResponse> result = userService.getUsersWithNoOrders();
+
+        assertThat(result).isEmpty();
+    }
 
     @Test
     void 신규_이메일로_회원가입하면_회원정보를_반환한다() {
