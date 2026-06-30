@@ -60,6 +60,29 @@ class UserServiceTest {
     }
 
     @Test
+    void 유저_id로_회원정보를_조회한다() {
+        User user = new User(1L, "조회유저", "find@test.com", "password123", "서울시 강남구", null, LocalDateTime.now());
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+
+        Optional<UserResponse> result = userService.findById(1L);
+
+        assertThat(result).isPresent();
+        assertThat(result.get().userId()).isEqualTo(1L);
+        assertThat(result.get().email()).isEqualTo("find@test.com");
+        assertThat(result.get().getClass().getDeclaredFields())
+                .noneMatch(f -> f.getName().equals("password"));
+    }
+
+    @Test
+    void 없는_유저_id는_빈_Optional을_반환한다() {
+        given(userRepository.findById(999L)).willReturn(Optional.empty());
+
+        Optional<UserResponse> result = userService.findById(999L);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     void 신규_이메일로_회원가입하면_회원정보를_반환한다() {
         // Given
         UserCreateRequest request = new UserCreateRequest("박준서", "jun@test.com", "password123", "서울시 강남구", LocalDate.of(1995, 1, 1));

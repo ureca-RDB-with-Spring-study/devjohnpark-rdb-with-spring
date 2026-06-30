@@ -22,6 +22,13 @@ public class UserController {
         return ResponseEntity.ok(userService.getUsersWithNoOrders());
     }
 
+    @GetMapping("/{userId}")
+    public ResponseEntity<UserResponse> getUser(@PathVariable Long userId) {
+        return userService.findById(userId)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @PostMapping
     public ResponseEntity<UserResponse> register(@RequestBody UserCreateRequest request) {
         UserResponse response = userService.register(request);

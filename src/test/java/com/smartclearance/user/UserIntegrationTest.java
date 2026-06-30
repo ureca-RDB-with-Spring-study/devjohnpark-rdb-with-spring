@@ -6,6 +6,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,6 +68,38 @@ class UserIntegrationTest {
                 .andExpect(jsonPath("$.email").value("hong@test.com"))
                 .andExpect(jsonPath("$.address").value("서울시 강남구"))
                 .andExpect(jsonPath("$.password").doesNotExist());
+    }
+
+    @Test
+    void 유저_id로_회원정보를_조회한다() throws Exception {
+        MvcResult result = mockMvc.perform(post("/api/users")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "name": "조회유저",
+                                  "email": "find@test.com",
+                                  "password": "password123",
+                                  "address": "서울시 강남구",
+                                  "birthDate": "1995-01-01"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String location = result.getResponse().getHeader("Location");
+
+        mockMvc.perform(get(location))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").isNumber())
+                .andExpect(jsonPath("$.name").value("조회유저"))
+                .andExpect(jsonPath("$.email").value("find@test.com"))
+                .andExpect(jsonPath("$.password").doesNotExist());
+    }
+
+    @Test
+    void 없는_유저_id로_조회하면_404를_반환한다() throws Exception {
+        mockMvc.perform(get("/api/users/999999999"))
+                .andExpect(status().isNotFound());
     }
 
     @Test
