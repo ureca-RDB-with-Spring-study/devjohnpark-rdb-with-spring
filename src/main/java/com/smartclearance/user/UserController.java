@@ -3,6 +3,7 @@ package com.smartclearance.user;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,11 @@ public class UserController {
     @GetMapping("/no-orders")
     public ResponseEntity<List<UserResponse>> getUsersWithNoOrders() {
         return ResponseEntity.ok(userService.getUsersWithNoOrders());
+    }
+
+    @GetMapping("/unsafe-search")
+    public ResponseEntity<List<User>> unsafeSearch(@RequestParam String keyword) throws IOException {
+        return ResponseEntity.ok(userService.unsafeSearch(keyword));
     }
 
     @PostMapping

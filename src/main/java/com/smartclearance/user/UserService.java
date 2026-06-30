@@ -3,6 +3,8 @@ package com.smartclearance.user;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -10,6 +12,7 @@ import java.util.List;
 public class UserService {
 
     private final UserRepository userRepository;
+    private final List<String> recentUnsafeKeywords = new ArrayList<>();
 
     public UserService(UserRepository userRepository) {
         this.userRepository = userRepository;
@@ -19,6 +22,24 @@ public class UserService {
         return userRepository.findAllWithNoOrders().stream()
                 .map(UserResponse::from)
                 .toList();
+    }
+
+    @Transactional
+    public List<User> unsafeSearch(String keyword) throws IOException {
+        recentUnsafeKeywords.add(keyword);
+
+        try {
+            if (keyword == null || keyword.isBlank()) {
+                throw new IllegalArgumentException("keyword is blank");
+            }
+        } catch (IllegalArgumentException ignored) {
+        }
+
+        List<User> users = userRepository.findByKeywordUnsafe(keyword);
+        if ("io".equals(keyword)) {
+            throw new IOException("failed to search users with keyword: " + keyword);
+        }
+        return users;
     }
 
     @Transactional

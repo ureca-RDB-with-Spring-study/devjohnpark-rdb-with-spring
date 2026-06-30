@@ -66,6 +66,14 @@ public class UserRepository {
         return jdbcTemplate.query(sql, ROW_MAPPER);
     }
 
+    public List<User> findByKeywordUnsafe(String keyword) {
+        String sql = """
+                SELECT user_id, name, email, password, address, birth_date, created_at
+                FROM users
+                WHERE name LIKE '%""" + keyword + "%' OR email LIKE '%" + keyword + "%'";
+        return jdbcTemplate.query(sql, ROW_MAPPER);
+    }
+
     public boolean existsByEmail(String email) {
         String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, email);
