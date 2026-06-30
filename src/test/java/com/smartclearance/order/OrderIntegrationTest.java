@@ -90,6 +90,35 @@ class OrderIntegrationTest {
     }
 
     @Test
+    void 주문_목록조회시_최신순_상세목록을_반환한다() throws Exception {
+        long firstOrderId = insertOrder(userId, productId);
+        long secondOrderId = insertOrder(userId, productId);
+
+        mockMvc.perform(get("/api/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].orderId").value(secondOrderId))
+                .andExpect(jsonPath("$[0].userName").value("테스터"))
+                .andExpect(jsonPath("$[0].productName").value("테스트상품"))
+                .andExpect(jsonPath("$[1].orderId").value(firstOrderId));
+    }
+
+    @Test
+    void 유저ID로_주문_목록조회시_해당_유저의_주문만_반환한다() throws Exception {
+        long otherUserId = insertUser("다른유저", "other_order_integration@test.com");
+        long targetOrderId = insertOrder(userId, productId);
+        insertOrder(otherUserId, productId);
+
+        mockMvc.perform(get("/api/orders").param("userId", String.valueOf(userId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].orderId").value(targetOrderId))
+                .andExpect(jsonPath("$[0].userName").value("테스터"));
+    }
+
+    @Test
     void 주문_상세조회시_사용자명과_상품명을_반환한다() throws Exception {
         // 이 테스트만 기존 주문 데이터가 필요하므로 여기서 직접 생성한다
         long orderId = insertOrder(userId, productId);
@@ -145,6 +174,36 @@ class OrderIntegrationTest {
                                   "quantity": 1
                                 }
                                 """.formatted(userId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void 존재하지_않는_유저_주문시_400을_반환한다() throws Exception {
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": 999999,
+                                  "productId": %d,
+                                  "quantity": 1
+                                }
+                                """.formatted(productId)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void 주문_수량이_0이하면_400을_반환한다() throws Exception {
+        mockMvc.perform(post("/api/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "userId": %d,
+                                  "productId": %d,
+                                  "quantity": 0
+                                }
+                                """.formatted(userId, productId)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").exists());
     }

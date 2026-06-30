@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -14,6 +15,11 @@ public class OrderController {
 
     public OrderController(OrderService orderService) {
         this.orderService = orderService;
+    }
+
+    @GetMapping
+    public ResponseEntity<List<OrderDetailResponse>> getOrders(@RequestParam(required = false) Long userId) {
+        return ResponseEntity.ok(orderService.getOrders(userId));
     }
 
     // JOIN 쿼리로 조회한 주문 상세 정보(사용자명, 상품명 포함)를 반환한다

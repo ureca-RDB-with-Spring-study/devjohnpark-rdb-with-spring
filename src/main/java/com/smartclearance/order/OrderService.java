@@ -2,8 +2,11 @@ package com.smartclearance.order;
 
 import com.smartclearance.product.Product;
 import com.smartclearance.product.ProductRepository;
+import com.smartclearance.user.UserRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
@@ -11,10 +14,19 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
+    private final UserRepository userRepository;
 
-    public OrderService(OrderRepository orderRepository, ProductRepository productRepository) {
+    public OrderService(OrderRepository orderRepository, ProductRepository productRepository, UserRepository userRepository) {
         this.orderRepository = orderRepository;
         this.productRepository = productRepository;
+        this.userRepository = userRepository;
+    }
+
+    public List<OrderDetailResponse> getOrders(Long userId) {
+        if (userId == null) {
+            return orderRepository.findAllDetails();
+        }
+        return orderRepository.findDetailsByUserId(userId);
     }
 
     // JOIN 쿼리로 주문 상세 정보를 조회한다
@@ -27,6 +39,11 @@ public class OrderService {
 
     @Transactional
     public OrderResponse order(OrderCreateRequest request) {
+        validateCreateRequest(request);
+
+        userRepository.findById(request.userId())
+                .orElseThrow(() -> new IllegalArgumentException("유저를 찾을 수 없습니다: " + request.userId()));
+
         Product product = productRepository.findById(request.productId())
                 .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다: " + request.productId()));
 
@@ -45,5 +62,20 @@ public class OrderService {
         return orderRepository.findById(orderId)
                 .map(OrderResponse::from)
                 .orElseThrow(() -> new IllegalStateException("주문 저장 실패"));
+    }
+
+    private void validateCreateRequest(OrderCreateRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("주문 요청이 비어 있습니다");
+        }
+        if (request.userId() == null) {
+            throw new IllegalArgumentException("유저 ID는 필수입니다");
+        }
+        if (request.productId() == null) {
+            throw new IllegalArgumentException("상품 ID는 필수입니다");
+        }
+        if (request.quantity() <= 0) {
+            throw new IllegalArgumentException("주문 수량은 1 이상이어야 합니다");
+        }
     }
 }
