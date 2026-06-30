@@ -1,6 +1,9 @@
 package com.smartclearance.order;
 
+import com.smartclearance.product.Product;
 import com.smartclearance.product.ProductRepository;
+import com.smartclearance.user.User;
+import com.smartclearance.user.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -8,10 +11,12 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 // DB 없이 OrderService의 비즈니스 로직만 단독으로 검증하는 단위 테스트
@@ -28,6 +33,9 @@ class OrderServiceTest {
     // @InjectMocks가 생성자 주입 시 필요로 하므로 선언한다
     @Mock
     ProductRepository productRepository;
+
+    @Mock
+    UserRepository userRepository;
 
     // @Mock으로 만든 가짜 객체들을 주입받은 실제 테스트 대상
     @InjectMocks
@@ -58,6 +66,63 @@ class OrderServiceTest {
         // Then: Service가 Optional.empty()를 IllegalArgumentException으로 전환하는지 확인
         // 컨트롤러의 ExceptionHandler가 이 예외를 받아 400으로 응답한다
         assertThatThrownBy(() -> orderService.getOrderDetail(999L))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("999");
+    }
+
+    @Test
+    void 주문_목록을_조회한다() {
+        OrderDetailResponse detail = new OrderDetailResponse(1L, "테스터", "테스트상품", 2, LocalDateTime.now(), "PENDING");
+        given(orderRepository.findAllDetails()).willReturn(List.of(detail));
+
+        List<OrderDetailResponse> result = orderService.getOrders(null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).orderId()).isEqualTo(1L);
+    }
+
+    @Test
+    void 유저ID가_있으면_해당_유저의_주문_목록을_조회한다() {
+        OrderDetailResponse detail = new OrderDetailResponse(1L, "테스터", "테스트상품", 2, LocalDateTime.now(), "PENDING");
+        given(orderRepository.findDetailsByUserId(1L)).willReturn(List.of(detail));
+
+        List<OrderDetailResponse> result = orderService.getOrders(1L);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).userName()).isEqualTo("테스터");
+    }
+
+    @Test
+    void 주문_성공시_재고를_차감하고_주문정보를_반환한다() {
+        User user = new User(1L, "테스터", "test@test.com", "password123", null, null, null);
+        Product product = new Product(2L, "테스트상품", null, null, 10000, 100);
+        Order savedOrder = new Order(10L, 1L, 2L, 3, LocalDateTime.now(), "PENDING");
+
+        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(productRepository.findById(2L)).willReturn(Optional.of(product));
+        given(productRepository.decreaseStock(2L, 3)).willReturn(1);
+        given(orderRepository.save(any(Order.class))).willReturn(10L);
+        given(orderRepository.findById(10L)).willReturn(Optional.of(savedOrder));
+
+        OrderResponse response = orderService.order(new OrderCreateRequest(1L, 2L, 3));
+
+        assertThat(response.orderId()).isEqualTo(10L);
+        assertThat(response.quantity()).isEqualTo(3);
+        assertThat(response.status()).isEqualTo("PENDING");
+    }
+
+    @Test
+    void 주문_수량이_0이하면_예외가_발생한다() {
+        assertThatThrownBy(() -> orderService.order(new OrderCreateRequest(1L, 2L, 0)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("1 이상");
+    }
+
+    @Test
+    void 존재하지_않는_유저로_주문하면_예외가_발생한다() {
+        given(userRepository.findById(999L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.order(new OrderCreateRequest(999L, 2L, 1)))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("999");
     }

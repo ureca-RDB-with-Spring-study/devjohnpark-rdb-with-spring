@@ -11,6 +11,7 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.sql.PreparedStatement;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -103,6 +104,32 @@ class OrderRepositoryTest {
         assertThat(result.get().status()).isEqualTo("PENDING");
         // order_date는 DB의 DEFAULT CURRENT_TIMESTAMP로 자동 설정되므로 null이 아님을 확인
         assertThat(result.get().orderDate()).isNotNull();
+    }
+
+    @Test
+    void 전체_주문_상세목록을_최신순으로_조회한다() {
+        long firstOrderId = insertOrder(userId, productId);
+        long secondOrderId = insertOrder(userId, productId);
+
+        List<OrderDetailResponse> result = orderRepository.findAllDetails();
+
+        assertThat(result).extracting(OrderDetailResponse::orderId)
+                .containsExactly(secondOrderId, firstOrderId);
+        assertThat(result.get(0).userName()).isEqualTo("테스터");
+        assertThat(result.get(0).productName()).isEqualTo("테스트상품");
+    }
+
+    @Test
+    void 특정_유저의_주문_상세목록만_조회한다() {
+        long otherUserId = insertUser("다른유저", "other_order_test@test.com");
+        long targetOrderId = insertOrder(userId, productId);
+        insertOrder(otherUserId, productId);
+
+        List<OrderDetailResponse> result = orderRepository.findDetailsByUserId(userId);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).orderId()).isEqualTo(targetOrderId);
+        assertThat(result.get(0).userName()).isEqualTo("테스터");
     }
 
     @Test

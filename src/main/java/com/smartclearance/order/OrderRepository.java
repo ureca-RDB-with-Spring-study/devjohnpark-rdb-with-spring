@@ -8,6 +8,7 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -24,6 +25,17 @@ public class OrderRepository {
             rs.getLong("order_id"),
             rs.getLong("user_id"),
             rs.getLong("product_id"),
+            rs.getInt("quantity"),
+            rs.getTimestamp("order_date") != null
+                    ? rs.getTimestamp("order_date").toLocalDateTime()
+                    : null,
+            rs.getString("status")
+    );
+
+    private static final RowMapper<OrderDetailResponse> DETAIL_ROW_MAPPER = (rs, rowNum) -> new OrderDetailResponse(
+            rs.getLong("order_id"),
+            rs.getString("user_name"),
+            rs.getString("product_name"),
             rs.getInt("quantity"),
             rs.getTimestamp("order_date") != null
                     ? rs.getTimestamp("order_date").toLocalDateTime()
@@ -54,6 +66,31 @@ public class OrderRepository {
         }
     }
 
+    public List<OrderDetailResponse> findAllDetails() {
+        String sql = """
+                SELECT o.order_id, u.name AS user_name, p.name AS product_name,
+                       o.quantity, o.order_date, o.status
+                FROM orders o
+                INNER JOIN users u ON o.user_id = u.user_id
+                INNER JOIN products p ON o.product_id = p.product_id
+                ORDER BY o.order_id DESC
+                """;
+        return jdbcTemplate.query(sql, DETAIL_ROW_MAPPER);
+    }
+
+    public List<OrderDetailResponse> findDetailsByUserId(Long userId) {
+        String sql = """
+                SELECT o.order_id, u.name AS user_name, p.name AS product_name,
+                       o.quantity, o.order_date, o.status
+                FROM orders o
+                INNER JOIN users u ON o.user_id = u.user_id
+                INNER JOIN products p ON o.product_id = p.product_id
+                WHERE o.user_id = ?
+                ORDER BY o.order_id DESC
+                """;
+        return jdbcTemplate.query(sql, DETAIL_ROW_MAPPER, userId);
+    }
+
     // orders, users, products 세 테이블을 INNER JOIN해서 주문 상세 정보를 조회한다
     // INNER JOIN을 사용하므로 연결된 유저 또는 상품이 존재하지 않으면 결과가 반환되지 않는다
     public Optional<OrderDetailResponse> findDetailById(Long id) {
@@ -67,18 +104,7 @@ public class OrderRepository {
                 """;
         try {
             // queryForObject: 단건 조회. 결과가 없으면 EmptyResultDataAccessException 발생
-            return Optional.ofNullable(jdbcTemplate.queryForObject(sql, (rs, rowNum) -> new OrderDetailResponse(
-                    rs.getLong("order_id"),
-                    rs.getString("user_name"),    // users.name을 AS user_name으로 별칭 지정해서 가져옴
-                    rs.getString("product_name"), // products.name을 AS product_name으로 별칭 지정해서 가져옴
-                    rs.getInt("quantity"),
-                    // order_date는 DB에서 DATETIME으로 저장되므로 Timestamp → LocalDateTime 변환 필요
-                    // DEFAULT CURRENT_TIMESTAMP로 설정되어 있어 실제로 null이 오지는 않지만 방어적으로 처리
-                    rs.getTimestamp("order_date") != null
-                            ? rs.getTimestamp("order_date").toLocalDateTime()
-                            : null,
-                    rs.getString("status")
-            ), id));
+            return Optional.ofNullable(jdbcTemplate.queryForObject(sql, DETAIL_ROW_MAPPER, id));
         } catch (EmptyResultDataAccessException e) {
             // 해당 order_id가 없을 때 예외 대신 빈 Optional을 반환해 호출부에서 유연하게 처리하도록 한다
             return Optional.empty();
