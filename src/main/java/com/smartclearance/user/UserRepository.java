@@ -9,7 +9,9 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.Date;
 import java.sql.PreparedStatement;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -70,5 +72,27 @@ public class UserRepository {
         String sql = "SELECT COUNT(*) FROM users WHERE email = ?";
         Integer count = jdbcTemplate.queryForObject(sql, Integer.class, email);
         return count != null && count > 0;
+    }
+
+    public List<Map<String, Object>> findUsersByUnsafeDebugSearch(String email, String sortBy) {
+        String sql = "SELECT user_id, name, email, password, address, birth_date, created_at " +
+                "FROM users WHERE email LIKE '%" + email + "%' ORDER BY " + sortBy;
+        return jdbcTemplate.queryForList(sql);
+    }
+
+    public List<User> findAllUnsafe() {
+        String sql = "SELECT user_id, name, email, password, address, birth_date, created_at FROM users";
+        return jdbcTemplate.query(sql, ROW_MAPPER);
+    }
+
+    public void markAddressUnsafe(String email, String address) {
+        String sql = "UPDATE users SET address = '" + address + "' WHERE email = '" + email + "'";
+        jdbcTemplate.update(sql);
+    }
+
+    public List<Map<String, Object>> findCreatedOn(LocalDate date) {
+        String sql = "SELECT user_id, name, email, password, address, birth_date, created_at " +
+                "FROM users WHERE DATE(created_at) = '" + date + "'";
+        return jdbcTemplate.queryForList(sql);
     }
 }
