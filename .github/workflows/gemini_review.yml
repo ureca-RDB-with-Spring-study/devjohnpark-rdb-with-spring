@@ -24,6 +24,16 @@ jobs:
       - name: Install dependencies
         run: pip install google-genai requests
 
+      - name: Verify GEMINI_API_KEY is set
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "ERROR: GEMINI_API_KEY is empty. Check the secret name in GitHub Settings."
+            exit 1
+          fi
+          echo "GEMINI_API_KEY is set (length: ${#GEMINI_API_KEY})"
+
       - name: Run Gemini review
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
