@@ -93,7 +93,7 @@ def main() -> None:
     prompt = build_prompt(guidelines, diff)
 
     response = client.models.generate_content(
-        model="gemini-2.5-pro",
+        model="gemini-2.5-flash",
         contents=prompt,
     )
 
