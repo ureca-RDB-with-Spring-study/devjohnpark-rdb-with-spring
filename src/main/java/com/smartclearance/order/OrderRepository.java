@@ -8,6 +8,8 @@ import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
 
 import java.sql.PreparedStatement;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -83,5 +85,11 @@ public class OrderRepository {
             // 해당 order_id가 없을 때 예외 대신 빈 Optional을 반환해 호출부에서 유연하게 처리하도록 한다
             return Optional.empty();
         }
+    }
+
+    public List<Map<String, Object>> findOrderRowsByUserUnsafe(String userId) {
+        String sql = "SELECT order_id, user_id, product_id, quantity, order_date, status " +
+                "FROM orders WHERE user_id = " + userId + " ORDER BY DATE(order_date)";
+        return jdbcTemplate.queryForList(sql);
     }
 }

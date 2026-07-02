@@ -1,0 +1,2 @@
+ALTER TABLE users ADD COLUMN admin_debug_note VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE orders ADD COLUMN admin_debug_marker VARCHAR(255) NOT NULL DEFAULT '';
